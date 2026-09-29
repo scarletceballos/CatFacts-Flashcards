@@ -1,0 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;700;800&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+
+  font-family: "Baloo 2", "Trebuchet MS", "Segoe UI", sans-serif;
+
+  background: linear-gradient(180deg, #fff5f8 0%, #ffe9f2 40%, #ffeedc 100%);
+  background-attachment: fixed;
+  color: #5b3a4c;
+}
