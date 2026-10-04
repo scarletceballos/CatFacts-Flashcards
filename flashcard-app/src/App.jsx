@@ -19,6 +19,7 @@ const cards = [
     emoji: "😴",
     image: sleepImg,
     difficulty: "Easy",
+    keywords: ["12 to 16", "12 16", "16 hours"],
   },
   {
     question: "Why do cats purr?",
@@ -26,6 +27,7 @@ const cards = [
     emoji: "😻",
     image: purrImg,
     difficulty: "Medium",
+    keywords: ["content", "contentment", "happy", "soothe", "comfort", "relax"],
   },
   {
     question: "What is a group of cats called?",
@@ -33,6 +35,7 @@ const cards = [
     emoji: "🐈‍⬛",
     image: clowderImg,
     difficulty: "Hard",
+    keywords: ["clowder"],
   },
   {
     question: "How many toes does a cat usually have?",
@@ -40,6 +43,7 @@ const cards = [
     emoji: "🐾",
     image: pawImg,
     difficulty: "Medium",
+    keywords: ["18", "eighteen"],
   },
   {
     question: "Can cats taste sweetness?",
@@ -47,6 +51,7 @@ const cards = [
     emoji: "🍬",
     image: candyImg,
     difficulty: "Hard",
+    keywords: ["no", "nope", "cant", "cannot", "can t"],
   },
   {
     question: "What is a baby cat called?",
@@ -54,6 +59,7 @@ const cards = [
     emoji: "🐱",
     image: kittenImg,
     difficulty: "Easy",
+    keywords: ["kitten"],
   },
   {
     question: "Why do cats knead with their paws?",
@@ -61,6 +67,7 @@ const cards = [
     emoji: "🐈",
     image: kneadImg,
     difficulty: "Hard",
+    keywords: ["milk", "kitten", "kittenhood", "comfort", "comforting", "nursing"],
   },
   {
     question: "How fast can a house cat run?",
@@ -68,6 +75,7 @@ const cards = [
     emoji: "💨",
     image: runImg,
     difficulty: "Easy",
+    keywords: ["30", "thirty"],
   },
   {
     question: "Do cats have a sense of smell better than humans?",
@@ -75,6 +83,7 @@ const cards = [
     emoji: "👃",
     image: smellImg,
     difficulty: "Medium",
+    keywords: ["yes", "14", "fourteen"],
   },
   {
     question: "What is it called when a cat's ears are flattened?",
@@ -82,53 +91,90 @@ const cards = [
     emoji: "😾",
     image: earsImg,
     difficulty: "Medium",
+    keywords: ["airplane", "fear", "angry", "anger", "annoyed", "annoyance", "scared"],
   },
 ];
 
 const SWIPE_DURATION = 300;
+const MAX_ATTEMPTS = 3;
 const FILTERS = ["All", "Easy", "Medium", "Hard"];
+const ALL_INDICES = cards.map((_, index) => index);
 
-function getFilteredIndices(filter) {
-  return cards
-    .map((_, index) => index)
-    .filter((index) => filter === "All" || cards[index].difficulty === filter);
+// Lowercase, turn punctuation into spaces, collapse whitespace.
+function normalize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Correct if the guess equals the full answer, or contains any keyword as a whole word/phrase.
+function isCorrectGuess(guess, card) {
+  const cleaned = normalize(guess);
+  if (!cleaned) return false;
+  if (cleaned === normalize(card.answer)) return true;
+
+  const padded = ` ${cleaned} `;
+  return card.keywords.some((keyword) => padded.includes(` ${normalize(keyword)} `));
+}
+
+function shuffle(list) {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 function App() {
-  const [history, setHistory] = useState([0]);
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const [order, setOrder] = useState(ALL_INDICES); // sequence of card indices; reshuffled on demand
+  const [mastered, setMastered] = useState([]); // card indices removed from the pool
+  const [currentIndex, setCurrentIndex] = useState(0); // position within the visible deck
   const [isFlipped, setIsFlipped] = useState(false);
   const [swipeState, setSwipeState] = useState("idle"); // idle | next-out | next-in | back-out | back-in
   const [filter, setFilter] = useState("All");
-  const [progress, setProgress] = useState({}); // { [cardIndex]: "known" | "learning" }
+  const [guess, setGuess] = useState("");
+  const [feedback, setFeedback] = useState(null); // null | "correct" | "incorrect"
+  const [streak, setStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
+  const [showHint, setShowHint] = useState(false);
+  const [attempts, setAttempts] = useState(0); // guesses used on the current card
+  const [totalGuesses, setTotalGuesses] = useState(0);
+  const [correctGuesses, setCorrectGuesses] = useState(0);
 
-  const currentCard = history[historyIndex];
-  const card = cards[currentCard];
-  const difficultyClass = `difficulty-${card.difficulty.toLowerCase()}`;
-  const canGoBack = historyIndex > 0;
-  const filteredIndices = getFilteredIndices(filter);
+  const deck = order.filter(
+    (index) =>
+      !mastered.includes(index) && (filter === "All" || cards[index].difficulty === filter)
+  );
+  const card = deck.length > 0 ? cards[deck[currentIndex]] : null;
+  const difficultyClass = card ? `difficulty-${card.difficulty.toLowerCase()}` : "";
+  const canGoBack = currentIndex > 0;
+  const canGoNext = currentIndex < deck.length - 1;
+  const attemptsLeft = MAX_ATTEMPTS - attempts;
+  // The answer is revealed once the guess is right or the guesses run out
+  const hasAnswered = feedback === "correct" || attemptsLeft <= 0;
+  const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : null;
+  const masteredPercent = Math.round((mastered.length / cards.length) * 100);
+  const hintWord = card ? card.keywords[0] : "";
 
-  const knownCount = Object.values(progress).filter((status) => status === "known").length;
-  const learningCount = Object.values(progress).filter((status) => status === "learning").length;
+  function resetCardState() {
+    setIsFlipped(false);
+    setGuess("");
+    setFeedback(null);
+    setShowHint(false);
+    setAttempts(0);
+  }
 
   function handleCardClick() {
-    if (swipeState !== "idle") return;
+    if (swipeState !== "idle" || !card || !hasAnswered) return;
     setIsFlipped(!isFlipped);
   }
 
   function handleNextCard() {
-    if (swipeState !== "idle") return;
+    if (swipeState !== "idle" || !canGoNext) return;
     setSwipeState("next-out");
 
     setTimeout(() => {
-      if (historyIndex < history.length - 1) {
-        setHistoryIndex(historyIndex + 1);
-      } else {
-        const randomIndex = filteredIndices[Math.floor(Math.random() * filteredIndices.length)];
-        setHistory([...history, randomIndex]);
-        setHistoryIndex(history.length);
-      }
-      setIsFlipped(false);
+      setCurrentIndex(currentIndex + 1);
+      resetCardState();
       setSwipeState("next-in");
 
       setTimeout(() => setSwipeState("idle"), SWIPE_DURATION);
@@ -140,8 +186,8 @@ function App() {
     setSwipeState("back-out");
 
     setTimeout(() => {
-      setHistoryIndex(historyIndex - 1);
-      setIsFlipped(false);
+      setCurrentIndex(currentIndex - 1);
+      resetCardState();
       setSwipeState("back-in");
 
       setTimeout(() => setSwipeState("idle"), SWIPE_DURATION);
@@ -150,29 +196,69 @@ function App() {
 
   function handleFilterChange(newFilter) {
     if (swipeState !== "idle" || newFilter === filter) return;
-
-    const indices = getFilteredIndices(newFilter);
-    const randomIndex = indices[Math.floor(Math.random() * indices.length)];
-
     setFilter(newFilter);
-    setHistory([randomIndex]);
-    setHistoryIndex(0);
-    setIsFlipped(false);
+    setCurrentIndex(0);
+    resetCardState();
   }
 
-  function markCard(status) {
-    setProgress((prev) => ({ ...prev, [currentCard]: status }));
+  function handleShuffle() {
+    if (swipeState !== "idle") return;
+    setOrder(shuffle(ALL_INDICES));
+    setCurrentIndex(0);
+    resetCardState();
+  }
+
+  function handleGuessChange(event) {
+    setGuess(event.target.value);
+    if (feedback === "incorrect") setFeedback(null);
+  }
+
+  function handleSubmitGuess(event) {
+    event.preventDefault();
+    if (!card || hasAnswered || !guess.trim()) return;
+
+    setTotalGuesses(totalGuesses + 1);
+    setAttempts(attempts + 1);
+
+    if (isCorrectGuess(guess, card)) {
+      const newStreak = streak + 1;
+      setIsFlipped(true);
+      setFeedback("correct");
+      setCorrectGuesses(correctGuesses + 1);
+      setStreak(newStreak);
+      setLongestStreak(Math.max(longestStreak, newStreak));
+    } else {
+      setFeedback("incorrect");
+      setStreak(0);
+      if (attemptsLeft - 1 <= 0) setIsFlipped(true);
+    }
+  }
+
+  function handleMaster() {
+    if (swipeState !== "idle" || !card) return;
+    setMastered([...mastered, deck[currentIndex]]);
+    setCurrentIndex(Math.max(0, Math.min(currentIndex, deck.length - 2)));
+    resetCardState();
+  }
+
+  function handleUnmaster(cardIndex) {
+    setMastered(mastered.filter((index) => index !== cardIndex));
+    setCurrentIndex(0);
+    resetCardState();
   }
 
   useEffect(() => {
     function handleKeyDown(event) {
+      const tag = event.target.tagName;
+      if (tag === "INPUT") return; // let the user type freely
+
       if (event.key === "ArrowRight") {
         event.preventDefault();
         handleNextCard();
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
         handleBackCard();
-      } else if (event.key === " " || event.key === "Enter") {
+      } else if ((event.key === " " || event.key === "Enter") && tag !== "BUTTON") {
         event.preventDefault();
         handleCardClick();
       }
@@ -191,8 +277,9 @@ function App() {
       </p>
 
       <p className="card-count">
-        Total cards: {cards.length}
-        {filter !== "All" && ` · Showing ${filteredIndices.length} ${filter}`}
+        {card ? `Card ${currentIndex + 1} of ${deck.length}` : "No cards left"}
+        {` · Total: ${cards.length}`}
+        {filter !== "All" && ` · Showing ${filter}`}
       </p>
 
       <div className="filter-row">
@@ -205,70 +292,138 @@ function App() {
             {filterOption}
           </button>
         ))}
+
+        <button className="filter-button shuffle-button" onClick={handleShuffle}>
+          🔀 Shuffle
+        </button>
       </div>
 
-      <div className={`flashcard-wrapper ${swipeState !== "idle" ? `swipe-${swipeState}` : ""}`}>
-        <div
-          className={`flashcard ${difficultyClass} ${isFlipped ? "flipped" : ""}`}
-          onClick={handleCardClick}
-        >
-          <div className="flashcard-inner">
-            <div className={`card-face card-front ${difficultyClass}`}>
-              <span className={`difficulty-badge ${difficultyClass}`}>
-                {card.difficulty}
-              </span>
+      <p className="score-summary streak-summary">
+        🔥 Current streak: {streak} &nbsp;·&nbsp; 🏆 Longest streak: {longestStreak}
+      </p>
 
-              {card.image ? (
-                <img className={`card-photo ${difficultyClass}`} src={card.image} alt="" />
-              ) : (
-                <span className="card-emoji">{card.emoji}</span>
-              )}
+      <div className="progress-section">
+        <div className="progress-bar" role="progressbar" aria-valuenow={masteredPercent} aria-valuemin={0} aria-valuemax={100}>
+          <div className="progress-fill" style={{ width: `${masteredPercent}%` }} />
+        </div>
+        <p className="progress-text">
+          ⭐ {mastered.length} of {cards.length} mastered
+          {accuracy !== null && ` · 🎯 Accuracy: ${accuracy}% (${correctGuesses}/${totalGuesses})`}
+        </p>
+      </div>
 
-              <span className="card-label">{card.emoji} Question</span>
+      {card ? (
+        <>
+          <div className={`flashcard-wrapper ${swipeState !== "idle" ? `swipe-${swipeState}` : ""}`}>
+            <div
+              className={`flashcard ${difficultyClass} ${isFlipped ? "flipped" : ""}`}
+              onClick={handleCardClick}
+            >
+              <div className="flashcard-inner">
+                <div className={`card-face card-front ${difficultyClass}`}>
+                  <span className={`difficulty-badge ${difficultyClass}`}>
+                    {card.difficulty}
+                  </span>
 
-              <h2>{card.question}</h2>
+                  {card.image ? (
+                    <img className={`card-photo ${difficultyClass}`} src={card.image} alt="" />
+                  ) : (
+                    <span className="card-emoji">{card.emoji}</span>
+                  )}
 
-              <p className="flip-instruction">Click to reveal the paw-some answer</p>
-            </div>
+                  <span className="card-label">{card.emoji} Question</span>
 
-            <div className={`card-face card-back ${difficultyClass}`}>
-              <span className={`difficulty-badge ${difficultyClass}`}>
-                {card.difficulty}
-              </span>
+                  <h2>{card.question}</h2>
 
-              {card.image ? (
-                <img className={`card-photo ${difficultyClass}`} src={card.image} alt="" />
-              ) : (
-                <span className="card-emoji">{card.emoji}</span>
-              )}
+                  <p className="flip-instruction">
+                    {hasAnswered ? "Click to reveal the paw-some answer" : "Guess to reveal the answer"}
+                  </p>
+                </div>
 
-              <span className="card-label">🐈 Answer</span>
+                <div className={`card-face card-back ${difficultyClass}`}>
+                  <span className={`difficulty-badge ${difficultyClass}`}>
+                    {card.difficulty}
+                  </span>
 
-              <h2>{card.answer}</h2>
+                  {card.image ? (
+                    <img className={`card-photo ${difficultyClass}`} src={card.image} alt="" />
+                  ) : (
+                    <span className="card-emoji">{card.emoji}</span>
+                  )}
 
-              <p className="flip-instruction">Click to see the question</p>
+                  <span className="card-label">🐈 Answer</span>
+
+                  <h2>{card.answer}</h2>
+
+                  <p className="flip-instruction">Click to see the question</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="know-row">
-        <button
-          className="learning-button"
-          onClick={() => markCard("learning")}
-          disabled={!isFlipped}
-        >
-          📚 Still learning
-        </button>
+          <form className="guess-form" onSubmit={handleSubmitGuess}>
+            <label htmlFor="guess-input" className="guess-label">
+              Your guess · {hasAnswered ? "no guesses left" : `${attemptsLeft} of ${MAX_ATTEMPTS} guesses left`}
+            </label>
+            <div className="guess-row">
+              <input
+                id="guess-input"
+                type="text"
+                className={`guess-input ${feedback ?? ""}`}
+                value={guess}
+                onChange={handleGuessChange}
+                disabled={hasAnswered}
+                placeholder="Type your answer..."
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={!guess.trim() || hasAnswered}
+              >
+                Submit
+              </button>
+            </div>
 
-        <button
-          className="known-button"
-          onClick={() => markCard("known")}
-          disabled={!isFlipped}
-        >
-          ✅ Know it
-        </button>
-      </div>
+            <div className="hint-row">
+              <button
+                type="button"
+                className="hint-button"
+                onClick={() => setShowHint(true)}
+                disabled={showHint || hasAnswered}
+              >
+                💡 Hint
+              </button>
+              {showHint && (
+                <span className="hint-text">
+                  Try a word that starts with "{hintWord[0].toUpperCase()}" ({hintWord.length} characters)
+                </span>
+              )}
+            </div>
+
+            {feedback === "correct" && (
+              <p className="feedback feedback-correct">✅ Correct! Purr-fect!</p>
+            )}
+            {feedback === "incorrect" && (
+              <p className="feedback feedback-incorrect">{hasAnswered
+                  ? "❌ Out of guesses — check the answer on the card!"
+                  : `❌ Not quite — ${attemptsLeft} ${attemptsLeft === 1 ? "guess" : "guesses"} left.`}</p>
+            )}
+          </form>
+
+          <div className="know-row">
+            <button className="known-button" onClick={handleMaster}>
+              ⭐ Mark as mastered
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="empty-message">
+          {mastered.length === cards.length
+            ? "🎉 You mastered every card!"
+            : "No cards to show here. Try another filter or restore a mastered card."}
+        </p>
+      )}
 
       <div className="button-row">
         <button
@@ -282,14 +437,25 @@ function App() {
         <button
           className="next-button"
           onClick={handleNextCard}
+          disabled={!canGoNext}
         >
           Next Card 🐾
         </button>
       </div>
 
-      <p className="score-summary">
-        ✅ Known: {knownCount} &nbsp;·&nbsp; 📚 Still learning: {learningCount} &nbsp;·&nbsp; Unseen: {cards.length - Object.keys(progress).length}
-      </p>
+      {mastered.length > 0 && (
+        <div className="mastered-list">
+          <h3>⭐ Mastered ({mastered.length})</h3>
+          <ul>
+            {mastered.map((cardIndex) => (
+              <li key={cardIndex}>
+                <span>{cards[cardIndex].emoji} {cards[cardIndex].question}</span>
+                <button onClick={() => handleUnmaster(cardIndex)}>Restore</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
