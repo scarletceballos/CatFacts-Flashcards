@@ -1,8 +1,8 @@
-# Web Development Project 2 - *Cat Facts*
+# Web Development Project 3 - *Cat Facts*
 
 Submitted by: **Scarlet Ceballos**
 
-This web app: **Test your knowledge about cats and keep track of what you do or don't know!**
+This web app: **A cat trivia flashcard game. Users type a guess for each question, get instant correct/incorrect feedback, flip the card to see the answer, and move through an ordered (or shuffled) deck while tracking streaks, accuracy, and mastered cards.**
 
 Time spent: **9** hours spent in total
 
@@ -10,40 +10,47 @@ Time spent: **9** hours spent in total
 
 The following **required** functionality is completed:
 
-
-- [x] **The app displays the title of the card set, a short description, and the total number of cards**
-  - [x] Title of card set is displayed 
-  - [x] A short description of the card set is displayed 
-  - [x] A list of card pairs is created
-  - [x] The total number of cards in the set is displayed 
-  - [x] Card set is represented as a list of card pairs (an array of dictionaries where each dictionary contains the question and answer is perfectly fine)
-- [x] **A single card at a time is displayed**
-  - [x] Only one half of the information pair is displayed at a time
-- [x] **Clicking on the card flips the card over, showing the corresponding component of the information pair**
-  - [x] Clicking on a card flips it over, showing the back with corresponding information 
-  - [x] Clicking on a flipped card again flips it back, showing the front
-- [x] **Clicking on the next button displays a random new card**
+- [x] **The user can enter their guess into an input box *before* seeing the flipside of the card**
+  - Application features a clearly labeled input box with a submit button where users can type in a guess
+  - Clicking on the submit button with an **incorrect** answer shows visual feedback that it is wrong 
+  -  Clicking on the submit button with a **correct** answer shows visual feedback that it is correct
+- [x] **The user can navigate through an ordered list of cardss**
+  - A forward/next button displayed on the card navigates to the next card in a set sequence when clicked
+  - A previous/back button displayed on the card returns to the previous card in the set sequence when clicked
+  - Both the next and back buttons should have some visual indication that the user is at the beginning or end of the list (for example, graying out and no longer being available to click), not allowing for wrap-around navigation
 
 The following **optional** features are implemented:
 
-- [x] Cards contain images in addition to or in place of text
-  - [x] Some or all cards have images in place of or in addition to text
-- [x] Cards have different visual styles such as color based on their category
-  - Example categories you can use:
-    - Difficulty: Easy/medium/hard
-    - Subject: Biology/Chemistry/Physics/Earth science
+
+- [x] Users can use a shuffle button to randomize the order of the cards
+  - Cards should remain in the same sequence (**NOT** randomized) unless the shuffle button is clicked 
+  - Cards should change to a random sequence once the shuffle button is clicked
+- [x] A user’s answer may be counted as correct even when it is slightly different from the target answer
+  - Answers are considered correct even if they only partially match the answer on the card 
+  - Examples: ignoring uppercase/lowercase discrepancies, ignoring punctuation discrepancies, matching only for a particular part of the answer rather than the whole answer
+- [x] A counter displays the user’s current and longest streak of correct responses
+  - The current counter increments when a user guesses an answer correctly
+  - The current counter resets to 0 when a user guesses an answer incorrectly
+  - A separate counter tracks the longest streak, updating if the value of the current streak counter exceeds the value of the longest streak counter 
+- [x] A user can mark a card that they have mastered and have it removed from the pool of displayed cards
+  - The user can mark a card to indicate that it has been mastered
+  - Mastered cards are removed from the pool of displayed cards and added to a list of mastered cards
+
 
 The following **additional** features are implemented:
 
-[x] Difficulty Filter
-[x] Keyboard shortcuts (right/left arrow for next/back, space/enter to flip)
-[x] buttons enabled once a card is flipped and records a status (known/still learning/unseen), shows a running score at the bottom
+- [x] **Hint button** that reveals the first letter and length of a key answer word without flipping the card
+- [x] **Mastery progress bar and guess accuracy**, showing how many cards are mastered and the percentage of guesses that were correct
+- [x] Difficulty filter (Easy / Medium / Hard) with color-coded cards
+- [x] Card flip animation and swipe transitions between cards
+- [x] Keyboard shortcuts: left/right arrows to navigate, Space/Enter to flip (disabled while typing in the guess box)
+- [x] Mastered cards can be restored back into the deck
 
 ## Video Walkthrough
 
 Here's a walkthrough of implemented required features:
 
-<img src='flashcard-app/gif/catvideo.gif' title='Video Walkthrough' width='850' alt='Video Walkthrough' />
+<img src='flashcard-app/gif/catpreview.gif' title='Video Walkthrough' width='850' alt='Video Walkthrough' />
 
 <!-- Replace this with whatever GIF tool you used! -->
 GIF created with [N-Studio](https://nicke.tech/n-studio) for Windows
@@ -62,10 +69,15 @@ GIF created with [N-Studio](https://nicke.tech/n-studio) for Windows
 
 ## Notes
 
-- Getting the right face to show in the front/back layer structure for the 3D card flip was always something I had difficulty getting working and timing it so it clicks mid-animation and not breaking it's state.
-- Chaining the swipe-out to then card change and then the swipe in animation with setTimeout while blocking clicks during the transtion
-- Because there needed to be randomness, adding a back button would mean keeping track of history so back can replay the previous card instead of another random one
-- When a filter is on, "random" would need to mean random within the filtered subset and switching filters mid-session would need to reset the valid card without breaking the flip/animation state
+Challenges encountered while building the app:
+
+- **Switching from random to ordered navigation.** Part 1 picked a random next card and kept a history array. Part 2 needed a fixed sequence with no wrap-around, so I replaced the history with a single `currentIndex` and derived `canGoBack` / `canGoNext` from it to disable the buttons at the ends.
+- **Keeping the deck consistent across features.** Shuffle, the difficulty filter, and mastered cards all change which cards are visible. I stored only a card order and a list of mastered indices, then computed the visible deck from them on each render. This avoided duplicated state getting out of sync, but I had to clamp `currentIndex` when a card was mastered so it never pointed past the end.
+- **Keyboard shortcuts vs. typing.** My Space/Enter handler on the whole window flipped the card and blocked spaces in the guess box. I fixed it by ignoring key events when the target is the input, and ignoring Space/Enter on buttons.
+- **Answer matching.** The answers are full sentences, so exact matching was unrealistic. I normalize guesses (lowercase, punctuation stripped, whitespace collapsed) and accept either the full answer or a whole-word match against a per-card `keywords` list. Whole-word matching means plurals like "kittens" don't count unless added as keywords.
+- **Streak and accuracy bookkeeping.** Submitting after a correct answer could inflate the streak, so Submit is disabled once a card is answered correctly, and wrong guesses reset the streak while still counting toward accuracy.
+- **Animations and stale state.** The swipe animation uses nested `setTimeout`s, so I block all navigation actions while a swipe is in progress to avoid state updates from overlapping clicks.
+
 
 ## License
 
